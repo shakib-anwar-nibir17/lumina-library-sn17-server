@@ -41,6 +41,7 @@ run().catch(console.dir);
 
 const categoryCollection = client.db("luminaLibrary").collection("category");
 const booksCollection = client.db("luminaLibrary").collection("books");
+const borrowCollection = client.db("luminaLibrary").collection("borrow");
 
 app.get("/category", async (req, res) => {
   const cursor = categoryCollection.find();
@@ -60,6 +61,9 @@ app.get("/books", async (req, res) => {
   res.send(result);
 });
 
+// bookCollection
+
+// all books list
 app.get("/books/category/:category", async (req, res) => {
   const category = req.params.category;
   const query = { category: category };
@@ -68,10 +72,52 @@ app.get("/books/category/:category", async (req, res) => {
   res.send(result);
 });
 
+// api for finding single book
 app.get("/books/:id", async (req, res) => {
   const id = req.params.id;
   const query = { _id: new ObjectId(id) };
   const result = await booksCollection.findOne(query);
+  res.send(result);
+});
+
+// update book information
+
+app.put("/books/:id", async (req, res) => {
+  const id = req.params.id;
+  const updatedBook = req.body;
+  console.log(id, updatedBook);
+  const filter = { _id: new ObjectId(id) };
+
+  const options = { upsert: true };
+
+  const BookDoc = {
+    $set: {
+      name: updatedBook.name,
+      author: updatedBook.author,
+      quantity: updatedBook.quantity,
+      rating: updatedBook.rating,
+      category: updatedBook.category,
+      image: updatedBook.image,
+    },
+  };
+  console.log(BookDoc);
+  const result = await booksCollection.updateOne(filter, BookDoc, options);
+  res.send(result);
+});
+
+// add new book to data base
+app.post("/books", async (req, res) => {
+  const newBook = req.body;
+  console.log(newBook);
+  const result = await booksCollection.insertOne(newBook);
+  res.send(result);
+});
+
+// borrow collection
+app.post("/borrowed_books", async (req, res) => {
+  const newEntry = req.body;
+  console.log(newEntry);
+  const result = await borrowCollection.insertOne(newEntry);
   res.send(result);
 });
 

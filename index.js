@@ -100,8 +100,25 @@ app.put("/books/:id", async (req, res) => {
       image: updatedBook.image,
     },
   };
-  console.log(BookDoc);
+
   const result = await booksCollection.updateOne(filter, BookDoc, options);
+  res.send(result);
+});
+
+// update a small part
+
+app.patch("/books/:id", async (req, res) => {
+  const id = req.params.id;
+  const updatedBook = req.body;
+  const filter = { _id: new ObjectId(id) };
+
+  const BookDoc = {
+    $set: {
+      quantity: updatedBook.quantity,
+    },
+  };
+
+  const result = await booksCollection.updateOne(filter, BookDoc);
   res.send(result);
 });
 
@@ -114,10 +131,29 @@ app.post("/books", async (req, res) => {
 });
 
 // borrow collection
+
+app.get("/borrowed_books", async (req, res) => {
+  console.log(req.query);
+  let query = {};
+  if (req.query?.email) {
+    query = { email: req.query.email };
+  }
+  const cursor = borrowCollection.find(query);
+  const result = await cursor.toArray();
+  res.send(result);
+});
+
 app.post("/borrowed_books", async (req, res) => {
   const newEntry = req.body;
   console.log(newEntry);
   const result = await borrowCollection.insertOne(newEntry);
+  res.send(result);
+});
+
+app.delete("/borrowed_books/:id", async (req, res) => {
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const result = await borrowCollection.deleteOne(query);
   res.send(result);
 });
 

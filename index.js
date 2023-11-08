@@ -1,13 +1,44 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
 //MIDDLEWARE
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+
+// logger middleware
+const logger = (req, res, next) => {
+  console.log("log: info", req.method, req.url);
+  next();
+};
+
+// verify token
+
+//token verify middleware
+const verifyToken = async (req, res, next) => {
+  const token = req.cookies.token;
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    req.user = decoded;
+    next();
+  });
+};
 
 // ------------MONGO DB --------------\\
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ctziwlh.mongodb.net/?retryWrites=true&w=majority`;
@@ -37,6 +68,37 @@ async function run() {
 }
 run().catch(console.dir);
 
+// auth related api
+app.post("/jwt", async (req, res) => {
+  const user = req.body;
+  const token = jwt.sign(user, process.env.ACCESS_TOKEN, {
+    expiresIn: "1h",
+  });
+  res
+    .cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production" ? true : false,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+    })
+    .send({ success: true });
+});
+
+//logout
+
+app.post("/logout", async (req, res) => {
+  const user = req.user;
+  const token = jwt.sign(user, process.env.ACCESS_TOKEN, {
+    expiresIn: "1h",
+  });
+  res
+    .clearCookie("token", token, {
+      maxAge: 0,
+      secure: process.env.NODE_ENV === "production" ? true : false,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+    })
+    .send({ success: true });
+});
+
 //collection name
 
 const categoryCollection = client.db("luminaLibrary").collection("category");
@@ -56,6 +118,7 @@ app.get("/category/:id", async (req, res) => {
 });
 
 app.get("/books", async (req, res) => {
+  console.log(req.body);
   const cursor = booksCollection.find();
   const result = await cursor.toArray();
   res.send(result);
@@ -123,17 +186,25 @@ app.patch("/books/:id", async (req, res) => {
 });
 
 // add new book to data base
-app.post("/books", async (req, res) => {
+app.post("/books", logger, verifyToken, async (req, res) => {
+  console.log(req);
+  console.log("owner", req.user);
+  //verify
   const newBook = req.body;
-  console.log(newBook);
   const result = await booksCollection.insertOne(newBook);
   res.send(result);
 });
 
 // borrow collection
 
-app.get("/borrowed_books", async (req, res) => {
-  console.log(req.query);
+app.get("/borrowed_books", logger, verifyToken, async (req, res) => {
+  console.log(req.query.email);
+  console.log("owner", req.user);
+  //verify
+  if (req.query.email !== req.user.email) {
+    return res.status(403).send({ message: "forbidden access" });
+  }
+  //
   let query = {};
   if (req.query?.email) {
     query = { email: req.query.email };
@@ -145,7 +216,6 @@ app.get("/borrowed_books", async (req, res) => {
 
 app.post("/borrowed_books", async (req, res) => {
   const newEntry = req.body;
-  console.log(newEntry);
   const result = await borrowCollection.insertOne(newEntry);
   res.send(result);
 });

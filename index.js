@@ -10,7 +10,10 @@ const port = process.env.PORT || 5000;
 //MIDDLEWARE
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "https://library-lumina-sn17.firebaseapp.com",
+      "https://library-lumina-sn17.web.app",
+    ],
     credentials: true,
   })
 );
@@ -18,26 +21,28 @@ app.use(express.json());
 app.use(cookieParser());
 
 // logger middleware
-const logger = (req, res, next) => {
-  console.log("log: info", req.method, req.url);
-  next();
-};
+// const logger = (req, res, next) => {
+//   console.log("log: info", req.method, req.url);
+//   next();
+// };
 
 // verify token
 
 //token verify middleware
 const verifyToken = async (req, res, next) => {
-  const token = req.cookies.token;
+  const token = req.cookies?.token;
   if (!token) {
     return res.status(401).send({ message: "unauthorized access" });
   }
-  jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
+  jwt.verify(token, process.env.ACCESS_TOKEN, (err, decode) => {
     if (err) {
       return res.status(401).send({ message: "unauthorized access" });
+    } else {
+      // Log the decoded value
+      req.user = decode;
     }
-    req.user = decoded;
-    next();
   });
+  next();
 };
 
 // ------------MONGO DB --------------\\
@@ -70,7 +75,10 @@ run().catch(console.dir);
 
 // auth related api
 app.post("/jwt", async (req, res) => {
+  const expirationDate = new Date();
+  expirationDate.setDate(expirationDate.getDate() + 7);
   const user = req.body;
+  console.log(user);
   const token = jwt.sign(user, process.env.ACCESS_TOKEN, {
     expiresIn: "1h",
   });
@@ -79,6 +87,7 @@ app.post("/jwt", async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production" ? true : false,
       sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      expires: expirationDate,
     })
     .send({ success: true });
 });
@@ -86,15 +95,14 @@ app.post("/jwt", async (req, res) => {
 //logout
 
 app.post("/logout", async (req, res) => {
-  const user = req.user;
-  const token = jwt.sign(user, process.env.ACCESS_TOKEN, {
-    expiresIn: "1h",
-  });
+  const expirationDate = new Date();
   res
-    .clearCookie("token", token, {
+    .clearCookie("token", {
       maxAge: 0,
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production" ? true : false,
       sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      expires: expirationDate,
     })
     .send({ success: true });
 });
@@ -117,8 +125,9 @@ app.get("/category/:id", async (req, res) => {
   res.send(result);
 });
 
-app.get("/books", async (req, res) => {
-  console.log(req.body);
+// // verifyToken
+app.get("/books", verifyToken, async (req, res) => {
+  console.log(req.user);
   const cursor = booksCollection.find();
   const result = await cursor.toArray();
   res.send(result);
@@ -143,9 +152,10 @@ app.get("/books/:id", async (req, res) => {
   res.send(result);
 });
 
-// update book information
+// update book information // verifyToken
 
-app.put("/books/:id", async (req, res) => {
+app.put("/books/:id", verifyToken, async (req, res) => {
+  console.log(req.body);
   const id = req.params.id;
   const updatedBook = req.body;
   console.log(id, updatedBook);
@@ -163,7 +173,6 @@ app.put("/books/:id", async (req, res) => {
       image: updatedBook.image,
     },
   };
-
   const result = await booksCollection.updateOne(filter, BookDoc, options);
   res.send(result);
 });
@@ -185,9 +194,9 @@ app.patch("/books/:id", async (req, res) => {
   res.send(result);
 });
 
-// add new book to data base
-app.post("/books", logger, verifyToken, async (req, res) => {
-  console.log(req);
+// add new book to data base  // verifyToken
+app.post("/books", verifyToken, async (req, res) => {
+  console.log(req.query);
   console.log("owner", req.user);
   //verify
   const newBook = req.body;
@@ -197,14 +206,7 @@ app.post("/books", logger, verifyToken, async (req, res) => {
 
 // borrow collection
 
-app.get("/borrowed_books", logger, verifyToken, async (req, res) => {
-  console.log(req.query.email);
-  console.log("owner", req.user);
-  //verify
-  if (req.query.email !== req.user.email) {
-    return res.status(403).send({ message: "forbidden access" });
-  }
-  //
+app.get("/borrowed_books", async (req, res) => {
   let query = {};
   if (req.query?.email) {
     query = { email: req.query.email };
@@ -214,10 +216,26 @@ app.get("/borrowed_books", logger, verifyToken, async (req, res) => {
   res.send(result);
 });
 
+// app.post("/borrowed_books", async (req, res) => {
+//   const newEntry = req.body;
+//   const result = await borrowCollection.insertOne(newEntry);
+//   res.send(result);
+// });
+
 app.post("/borrowed_books", async (req, res) => {
   const newEntry = req.body;
-  const result = await borrowCollection.insertOne(newEntry);
-  res.send(result);
+
+  const existingEntry = await borrowCollection.findOne({
+    email: newEntry.email,
+    name: newEntry.name,
+  });
+
+  if (existingEntry) {
+    res.status(400).send("This book is already borrowed by the user.");
+  } else {
+    const result = await borrowCollection.insertOne(newEntry);
+    res.send(result);
+  }
 });
 
 app.delete("/borrowed_books/:id", async (req, res) => {

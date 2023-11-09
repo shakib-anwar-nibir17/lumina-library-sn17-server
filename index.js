@@ -195,7 +195,7 @@ app.patch("/books/:id", async (req, res) => {
 });
 
 // add new book to data base  // verifyToken
-app.post("/books", async (req, res) => {
+app.post("/books", verifyToken, async (req, res) => {
   const newBook = req.body;
   const result = await booksCollection.insertOne(newBook);
   res.send(result);

@@ -195,10 +195,7 @@ app.patch("/books/:id", async (req, res) => {
 });
 
 // add new book to data base  // verifyToken
-app.post("/books", verifyToken, async (req, res) => {
-  console.log(req.query);
-  console.log("owner", req.user);
-  //verify
+app.post("/books", async (req, res) => {
   const newBook = req.body;
   const result = await booksCollection.insertOne(newBook);
   res.send(result);
@@ -215,12 +212,6 @@ app.get("/borrowed_books", async (req, res) => {
   const result = await cursor.toArray();
   res.send(result);
 });
-
-// app.post("/borrowed_books", async (req, res) => {
-//   const newEntry = req.body;
-//   const result = await borrowCollection.insertOne(newEntry);
-//   res.send(result);
-// });
 
 app.post("/borrowed_books", async (req, res) => {
   const newEntry = req.body;
